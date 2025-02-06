@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Room</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f4f4f4;
+        }
+        .chat-container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        #messages {
+            max-height: 400px;
+            overflow-y: auto;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+            padding-right: 10px;
+        }
+        #message {
+            width: 80%;
+        }
+        .typing-indicator {
+            font-style: italic;
+            color: gray;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container chat-container">
+    <h2 class="text-center">Welcome to the Chat Room</h2>
+
+
+    <div class="mb-3">
+        <label for="roomSelect" class="form-label">Select Room</label>
+        <select id="roomSelect" class="form-select">
+            <option value="room1">Room1</option>
+            <option value="room2">Room2</option>
+            <option value="room3">Room3</option>
+            <option value="room4">Room4</option>
+            <option value="room5">Room5</option>
+        </select>
+    </div>
+
+
+    <p id="typingIndicator" class="typing-indicator">User is typing...</p>
+
+   
+    <div id="messages"></div>
+    <div class="input-group mb-3">
+        <input type="text" id="message" class="form-control" placeholder="Type a message..." aria-label="Type a message...">
+        <button id="send-btn" class="btn btn-primary">Send</button>
+    </div>
+
+    <div class="input-group mb-3">
+        <button id="logout-btn" class="btn btn-primary mt-3 w-100">Logout</button>
+    </div>
+    <div class="input-group mb-3">
+        <input type="text" class="form-control" id="recipient" placeholder="Enter username to message" />
+    </div>
+    <div class="input-group mb-3">
+        <input type="text" class="form-control" id="privateMessageInput" placeholder="Type your private message"/>
+    </div>
+    <div class="input-group">
+        <button class="btn btn-primary" id="sendPrivateMessageBtn">Send Private Message</button>
+    </div>
+    
+    <div id="privateMessagesDiv"></div>
+</div>
+
+<script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+<script>
+    const token = localStorage.getItem('token');
+    const username = localStorage.getItem('username');
+    if (!token) {
+    
+        window.location.href = '/user/login';
+    }
+
+    const socket = io('http://localhost:5100', {
+        query: {token: token}
+    });  
+
+    socket.emit('register', username);
+
+    const roomSelect = document.getElementById('roomSelect');
+    const messagesDiv = document.getElementById('messages');
+    const messageInput = document.getElementById('message');
+    const sendButton = document.getElementById('send-btn');
+    const typingIndicator = document.getElementById('typingIndicator');
+    const logoutButton = document.getElementById('logout-btn');
+
+ 
+    let currentRoom = roomSelect.value;
+
+    socket.emit('joinRoom', { room: currentRoom, token });
+
+    socket.on('privateMessage', (data) => {
+        const { sender, message } = data;
+        
+        const privateMessagesDiv = document.getElementById('privateMessagesDiv');  
+        const messageElement = document.createElement('p');
+        messageElement.textContent = `Private message from ${sender}: ${message}`;
+        privateMessagesDiv.appendChild(messageElement);
+    
+    });
+
+    document.getElementById('sendPrivateMessageBtn').addEventListener('click', () => {
+        const recipient = document.getElementById('recipient').value.trim();
+        const message = document.getElementById('privateMessageInput').value.trim();
+
+        if (recipient && message) {
+           
+            socket.emit('privateMessage', { toUser: recipient, message });
+            document.getElementById('privateMessageInput').value = ''; 
+        } else {
+            console.log('Recipient or message is empty');
+        }
+    });
+  
+    roomSelect.addEventListener('change', (e) => {
+        previousRoom = currentRoom;
+        currentRoom = e.target.value;
+        socket.emit('leaveRoom', { room: previousRoom, token });
+        socket.emit('joinRoom', { room: currentRoom, token });
+    });
+
+
+    sendButton.addEventListener('click', () => {
+        const message = messageInput.value;
+        if (message.trim()) {
+        const message = messageInput.value;
+            console.log('chatMessage', message, token);
+            socket.emit('chatMessage', { room: currentRoom, message, token });
+            messageInput.value = '';  
+        }
+    });
+
+    socket.on('connect', () => {
+        console.log('Connected to server');
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Disconnected from the server');
+    });
+   
+    socket.on('message', (data) => {
+        const messageElement = document.createElement('p');
+        messageElement.textContent = `${data.username}: ${data.message}`;
+        messagesDiv.appendChild(messageElement);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight; 
+    });
+
+   
+    messageInput.addEventListener('input', () => {
+        socket.emit('typing', { room: currentRoom, username: username }); 
+    });
+
+    socket.on('typing', (data) => {
+        if (data.isTyping) {
+            typingIndicator.style.display = 'block';
+        } else {
+            typingIndicator.style.display = 'none';
+        }
+    });
+
+    logoutButton.addEventListener('click', () => {
+        localStorage.removeItem('token'); 
+        window.location.href = '/user/login'; 
+    });
+</script>
+
+</body>
+</html>
